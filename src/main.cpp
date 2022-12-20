@@ -23,10 +23,13 @@ void print4x4Matrix(const Eigen::Matrix4d & matrix)
 void keyboardEventOccurred(const pcl::visualization::KeyboardEvent& event, void*)
 {
     if(event.getKeySym () == "space" && event.keyDown ())
+    {
         next_iteration = true;
+    }        
 }
- int main(int argc, char* argv[])
- {
+
+int main(int argc, char* argv[])
+{
     // The point clouds we will be using
     PointCloudT::Ptr cloud_in(new PointCloudT);  // Original point cloud
     PointCloudT::Ptr cloud_tr(new PointCloudT);  // Transformed point cloud
@@ -55,7 +58,7 @@ void keyboardEventOccurred(const pcl::visualization::KeyboardEvent& event, void*
 
     pcl::console::TicToc time;
     time.tic();
-    if(pcl::io::loadPLYFile (argv[1], *cloud_in) < 0)
+    if(pcl::io::loadPLYFile(argv[1], *cloud_in) < 0)
     {
         PCL_ERROR("Error loading cloud %s.\n", argv[1]);
         return (-1);
@@ -89,20 +92,20 @@ void keyboardEventOccurred(const pcl::visualization::KeyboardEvent& event, void*
     icp.setInputSource(cloud_icp);
     icp.setInputTarget(cloud_in);
     icp.align(*cloud_icp);
-    icp.setMaximumIterations(1);  // We set this variable to 1 for the next time we will call .align () function
+    icp.setMaximumIterations(1);  // We set this variable to 1 for the next time we will call .align() function
     std::cout << "Applied " << iterations << " ICP iteration(s) in " << time.toc() << " ms" << std::endl;
 
-    if(icp.hasConverged ())
+    if(icp.hasConverged())
     {
         std::cout << "\nICP has converged, score is " << icp.getFitnessScore() << std::endl;
         std::cout << "\nICP transformation " << iterations << " : cloud_icp -> cloud_in" << std::endl;
         transformation_matrix = icp.getFinalTransformation().cast<double>();
-        print4x4Matrix (transformation_matrix);
+        print4x4Matrix(transformation_matrix);
     }
     else
     {
         PCL_ERROR("\nICP has not converged.\n");
-        return (-1);
+        return(-1);
     }
     // Visualization
     pcl::visualization::PCLVisualizer viewer("ICP demo");
@@ -162,7 +165,7 @@ void keyboardEventOccurred(const pcl::visualization::KeyboardEvent& event, void*
             icp.align(*cloud_icp);
             std::cout << "Applied 1 ICP iteration in " << time.toc() << " ms" << std::endl;
 
-            if(icp.hasConverged ())
+            if(icp.hasConverged())
             {
                 printf("\033[11A");  // Go up 11 lines in terminal output.
                 printf("\nICP has converged, score is %+.0e\n", icp.getFitnessScore ());

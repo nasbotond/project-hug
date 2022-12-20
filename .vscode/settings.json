@@ -89,6 +89,11 @@
         "cfenv": "cpp",
         "cinttypes": "cpp",
         "shared_mutex": "cpp",
-        "strstream": "cpp"
+        "strstream": "cpp",
+        "core": "cpp",
+        "span": "cpp",
+        "valarray": "cpp",
+        "*.ipp": "cpp",
+        "ranges": "cpp"
     }
 }

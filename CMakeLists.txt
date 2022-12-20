@@ -19,6 +19,11 @@ find_package ( OpenCV REQUIRED )
 include_directories ( ${OpenCV_INCLUDE_DIRS} )
 target_link_libraries(${EXEC_NAME} ${OpenCV_LIBS})
 
+# Eigen
+find_package(Eigen3 REQUIRED)
+link_directories(${Eigen_INCLUDE_DIRS})
+target_link_libraries(${EXEC_NAME} ${Eigen_LIBRARIES})
+
 # # OpenGL
 # find_package(OpenGL REQUIRED)
 # target_link_libraries(${EXEC_NAME} OpenGL::GL)
