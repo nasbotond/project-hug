@@ -13,7 +13,7 @@ include_directories(${INCLUDES})
 # In this CMakeLists.txt file, components are all built separately and linked together
 # If you prefer to compile source files + dependencies (OpenGL loaders, imgui, VtkViewer, etc.)
 # together, please see CMakeLists-alt.txt
-add_executable(${EXEC_NAME} ${SOURCE_DIR}/main.cpp)
+add_executable(${EXEC_NAME} ${SOURCE_DIR}/main.cpp ${SOURCE_DIR}/icp.cpp)
 
 find_package ( OpenCV REQUIRED )
 include_directories ( ${OpenCV_INCLUDE_DIRS} )

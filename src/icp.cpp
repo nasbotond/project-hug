@@ -21,6 +21,11 @@ int cmpKNeighbor(const void *a, const void *b)
 	return (*a1).distanceMean - (*a2).distanceMean;
 }
 
+void ICP::setMaximumIterations(int iter)
+{
+    max_iter = iter;
+}
+
 
 /*
 	Transform A to align best with B
@@ -50,19 +55,25 @@ int cmpKNeighbor(const void *a, const void *b)
 		H = AA^T*BB
 		U*S*Vt = singular_value_decomposition(H)
 		R = U*Vt
-		t = controid_B-R*centroid_A
+		t = centroid_B-R*centroid_A
 */
 Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B)
 {
-	size_t row = std::min(A.rows(),B.rows());
+	size_t row = std::min(A.rows(), B.rows());
 
-	Vector3d centroid_A(0,0,0);
-	Vector3d centroid_B(0,0,0);
+	Vector3d centroid_A(0, 0, 0);
+	Vector3d centroid_B(0, 0, 0);
 	
 	MatrixXd AA;
 	MatrixXd BB;
-	if(A.rows()>B.rows()) AA = BB = B;
-	else BB = AA = A;
+	if(A.rows() > B.rows())
+    {
+        AA = BB = B;
+    }
+	else
+    {
+        BB = AA = A;
+    }
 
 	Matrix4d T = MatrixXd::Identity(4,4);
 
@@ -97,15 +108,17 @@ Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B)
 	V = svd.matrixV();
 	Vt = V.transpose();
 
-	R = U*Vt;
+	// R = U*Vt;
+    R = Vt.transpose()*U.transpose();
 
 	if(R.determinant()<0)
 	{
 		Vt.block<1,3>(2,0) *= -1;
-		R = U*Vt;
+		// R = U*Vt;
+        R = Vt.transpose()*U.transpose();
 	}
 
-	t = centroid_B-R*centroid_A;
+	t = centroid_B - R*centroid_A;
 
 	T.block<3,3>(0,0) = R;
 	T.block<3,1>(0,3) = t;
@@ -119,7 +132,7 @@ Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B)
 		    remainPercentage x = [0 ~ 100] : Remove worst (100-x)% of 
 		    					correspondence for outlier rejection. 
 */
-Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B, std::vector<KNeighbor> neighbors, int remainPercentage=100, int K=5)
+Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B, std::vector<KNeighbor> neighbors, int remainPercentage, int K)
 {
 	int num = (int) neighbors.size()*remainPercentage/100;
 	Vector3d centroid_A(0,0,0);
@@ -127,16 +140,17 @@ Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B, std::vect
 	Vector3d temp(0,0,0);
 	MatrixXd AA = A;
 	MatrixXd BB = A;
+    // MatrixXd BB = B;
 	Matrix4d T = MatrixXd::Identity(4,4);
 
 	for(int i=0; i<num; i++)
 	{
 		int aIndex = neighbors[i].sourceIndex;
-		centroid_A += A.block<1,3>(aIndex,0).transpose();
-		for(int k=0;k<K;k++)
+		centroid_A += A.block<1,3>(aIndex, 0).transpose();
+		for(int k=0; k<K; k++)
 		{
 			int bIndex = neighbors[i].targetIndexes[k];
-			centroid_B += B.block<1,3>(bIndex,0).transpose();
+			centroid_B += B.block<1,3>(bIndex, 0).transpose();
 		}
 		centroid_B /= K;
 	}
@@ -147,14 +161,14 @@ Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B, std::vect
 	for(int i=0; i<num; i++)
 	{
 		int aIndex = neighbors[i].sourceIndex;
-		AA.block<1,3>(i,0) = A.block<1,3>(aIndex,0)-centroid_A.transpose();
+		AA.block<1,3>(i,0) = A.block<1,3>(aIndex, 0)-centroid_A.transpose();
 
-		for(int k=0;k<K;k++)
+		for(int k=0; k<K; k++)
 		{
 			int bIndex = neighbors[i].targetIndexes[k];
-			BB.block<1,3>(i,0) = B.block<1,3>(bIndex,0)-centroid_B.transpose();
+			BB.block<1,3>(i,0) = B.block<1,3>(bIndex, 0)-centroid_B.transpose();
 		}
-		BB.block<1,3>(i,0) /= K;		
+		BB.block<1,3>(i,0) /= K;	
 	}
 
 	MatrixXd H = AA.transpose()*BB;
@@ -188,7 +202,7 @@ Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B, std::vect
 	return T;
 }
 
-std::vector<KNeighbor> ICP::k_nearest_neighbors(const MatrixXd& source, const MatrixXd& target, float leaf_size=10, int K=5)
+std::vector<KNeighbor> ICP::k_nearest_neighbors(const MatrixXd& source, const MatrixXd& target, float leaf_size, int K)
 {
 	int dimension = 3;
 	int SourceRow = source.rows();
@@ -199,7 +213,7 @@ std::vector<KNeighbor> ICP::k_nearest_neighbors(const MatrixXd& source, const Ma
 	int tempIndex = 0;
 	float tempDistance = 0;
 
-	// build kdtree
+	// build kd-tree
 	Matrix<float, Dynamic, Dynamic> targetMatrix(targetRow, dimension);
 	for(int i=0; i<targetRow; i++)
     {
@@ -209,8 +223,8 @@ std::vector<KNeighbor> ICP::k_nearest_neighbors(const MatrixXd& source, const Ma
         }
     }
 
-	typedef KDTreeEigenMatrixAdaptor<Matrix<float,Dynamic,Dynamic> > kdtree_t;
-	kdtree_t targetKDtree(dimension, std::cref(targetMatrix),leaf_size);
+	typedef KDTreeEigenMatrixAdaptor<Matrix<float,Dynamic,Dynamic>> kdtree_t;
+	kdtree_t targetKDtree(dimension, std::cref(targetMatrix), leaf_size);
 	targetKDtree.index_->buildIndex();
 
 	for(int i=0; i<SourceRow; i++)
@@ -218,25 +232,25 @@ std::vector<KNeighbor> ICP::k_nearest_neighbors(const MatrixXd& source, const Ma
 		std::vector<float> sourcePoint(dimension);
 		float meanDis = 0.0f;
 
-		for(size_t d=0;d<dimension;d++)
+		for(size_t d=0; d<dimension; d++)
         {
-            sourcePoint[d]=source(i,d);
+            sourcePoint[d]=source(i, d);
         }			
 
 		std::vector<size_t> result_indexes(K);
 		std::vector<float> result_distances(K);
 		nanoflann::KNNResultSet<float> resultSet(K);
-		resultSet.init(&result_indexes[0],&result_distances[0]);
+		resultSet.init(&result_indexes[0], &result_distances[0]);
 		nanoflann::SearchParameters params_igonored;
-		targetKDtree.index_->findNeighbors(resultSet,&sourcePoint[0],params_igonored);
+		targetKDtree.index_->findNeighbors(resultSet, &sourcePoint[0], params_igonored);
 
 		KNeighbor neigh;
-		neigh.sourceIndex=i;
-		for(int i=0;i<K;i++)
+		neigh.sourceIndex = i;
+		for(int j=0; j<K; j++)
 		{
-			neigh.targetIndexes.push_back(result_indexes[i]);
-			neigh.distances.push_back(result_distances[i]);
-			meanDis += result_distances[i];
+			neigh.targetIndexes.push_back(result_indexes[j]);
+			neigh.distances.push_back(result_distances[j]);
+			meanDis += result_distances[j];
 		}
 		neigh.distanceMean = meanDis/K;
 		neighbors.push_back(neigh);
@@ -277,17 +291,15 @@ std::vector<KNeighbor> ICP::k_nearest_neighbors(const MatrixXd& source, const Ma
 				[xn,yn,zn]		
 		* src3d : save the temp matrix transformed in this iteration
 */
-ICP_OUT ICP::icp(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5)
+ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size, int Ksearch)
 {
 	size_t row = std::min(A.rows(),B.rows());
-	MatrixXd src = MatrixXd::Ones(3+1,row); 
-	MatrixXd src3d = MatrixXd::Ones(3,row); 
-	MatrixXd dst = MatrixXd::Ones(3+1,row); 
-	MatrixXd dst3d = MatrixXd::Ones(3,row);
+	MatrixXd src = MatrixXd::Ones(3+1,row);
+	MatrixXd src3d = MatrixXd::Ones(3,row);
+	MatrixXd dst = MatrixXd::Ones(3+1,row);
     std::vector<KNeighbor> neighbors;
-	Align alignments;
   	Matrix4d T;
-  	Matrix4d T_all = MatrixXd::Identity(4,4);
+  	// Matrix4d T_all = MatrixXd::Identity(4, 4);
 	ICP_OUT result;
 	int iter;
 
@@ -296,7 +308,6 @@ ICP_OUT ICP::icp(const MatrixXd &A, const MatrixXd &B, int max_iteration, float 
 		src.block<3,1>(0,i) = A.block<1,3>(i,0).transpose(); // line 4 for t:translate
 		src3d.block<3,1>(0,i) = A.block<1,3>(i,0).transpose(); // save the temp data
 		dst.block<3,1>(0,i) = B.block<1,3>(i,0).transpose();
-		dst3d.block<3,1>(0,i) = B.block<1,3>(i,0).transpose();
 	}
 
 	double prev_error = 0;
@@ -309,7 +320,7 @@ ICP_OUT ICP::icp(const MatrixXd &A, const MatrixXd &B, int max_iteration, float 
 
 		// save the transformed matrix in this iteration
 		T = best_fit_transform(src3d.transpose(), dst.transpose(), neighbors);
-		T_all = T*T_all;
+		// T_all = T*T_all;
 		src = T*src; // notice the order of matrix product
 
 		// copy the transformed matrix
@@ -325,11 +336,11 @@ ICP_OUT ICP::icp(const MatrixXd &A, const MatrixXd &B, int max_iteration, float 
             mean_error += neighbors[i].distanceMean;
         }			
 		mean_error /= neighbors.size();
-		std::cout<<"error"<<prev_error-mean_error<<std::endl;
-		if(abs(prev_error-mean_error)<tolerance)
+		std::cout << "error: " << prev_error-mean_error <<std::endl;
+		if(abs(prev_error - mean_error)<tolerance)
         {
             break;
-        }			
+        }
 	
 		prev_error = mean_error;
 	}
@@ -338,11 +349,57 @@ ICP_OUT ICP::icp(const MatrixXd &A, const MatrixXd &B, int max_iteration, float 
 	for(int i=0; i<neighbors.size(); i++)
     {
         distances.push_back(neighbors[i].distanceMean);
-    }	
+    }
 
-	result.trans = T_all;
+    T = best_fit_transform(A, src3d.transpose());
+
+	result.trans = T;
 	result.distances = distances;
 	result.iter = iter+1;
 
 	return result;
+}
+
+void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
+{
+    MatrixXf source_matrix = cloud_icp->getMatrixXfMap(3,4,0).transpose();
+    MatrixXf target_matrix = cloud_in->getMatrixXfMap(3,4,0).transpose();
+
+    float tolerance = 0.000001;
+
+    // call icp
+    ICP_OUT icp_result = icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance);
+
+    int iter = icp_result.iter;
+    Matrix4f T = icp_result.trans.cast<float>();
+    std::vector<float> distances = icp_result.distances;
+
+    MatrixXf source_trans_matrix = source_matrix;
+    
+    int row = source_matrix.rows();
+    MatrixXf source_trans4d = MatrixXf::Ones(3+1,row);
+    for(int i=0; i<row; i++)
+    {
+        source_trans4d.block<3,1>(0,i) = source_matrix.block<1,3>(i,0).transpose();
+    }
+    source_trans4d = T*source_trans4d;
+    for(int i=0; i<row; i++)
+    {
+        source_trans_matrix.block<1,3>(i,0)=source_trans4d.block<3,1>(0,i).transpose();
+    }
+
+    pcl::PointCloud<pcl::PointXYZ> temp_cloud;
+    temp_cloud.width = row;
+    temp_cloud.height = 1;
+    temp_cloud.points.resize(row);
+    for(size_t n=0; n<row; n++)
+    {
+        temp_cloud[n].x = source_trans_matrix(n, 0);
+        temp_cloud[n].y = source_trans_matrix(n, 1);
+        temp_cloud[n].z = source_trans_matrix(n, 2);	
+    }
+    // cloud_source_trans = temp_cloud.makeShared();
+    // cloud_icp = temp_cloud.makeShared();
+    cloud_icp_ = temp_cloud;
+    // return temp_cloud;
 }

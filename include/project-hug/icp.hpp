@@ -61,21 +61,23 @@ class ICP
 
     public:
 
-        ICP(float deltat, float beta, float zeta) : deltat(deltat), beta(beta), zeta(zeta), q(Quaternion(1.0, 0.0, 0.0, 0.0)) {}
+        ICP(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp, int max_iter) : cloud_in(cloud_in), cloud_icp(cloud_icp), max_iter(max_iter) {}
         ~ICP() {}
 
         // Main functions
         Matrix4d best_fit_transform(const MatrixXd &A, const MatrixXd &B);
         Matrix4d best_fit_transform(const MatrixXd &A, const MatrixXd &B, std::vector<KNeighbor> neighbors, int remainPercentage=100, int K=5);
         std::vector<KNeighbor> k_nearest_neighbors(const MatrixXd& source, const MatrixXd& target, float leaf_size=10, int K=5);
-        ICP_OUT icp(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5);
+        ICP_OUT icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5);
+        void align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_);
 
         // Helper functions
         float dist(const Vector3d &a, const Vector3d &b);
+        void setMaximumIterations(int iter);
         // int cmpKNeighbor(const void *a, const void *b);
 
         // Variables
         int max_iter;
-        pcl::PointCloud<PointXYZ>::Ptr cloud_target(new pcl::PointCloud<PointXYZ>);  // Original point cloud (target)
-        pcl::PointCloud<PointXYZ>::Ptr cloud_icp(new pcl::PointCloud<PointXYZ>);  // ICP output point cloud (source)
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in; //(new pcl::PointCloud<pcl::PointXYZ>);  // Original point cloud
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp; //(new pcl::PointCloud<pcl::PointXYZ>);  // ICP output point cloud
 };

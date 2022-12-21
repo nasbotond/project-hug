@@ -7,6 +7,8 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/console/time.h>   // TicToc
 
+#include "icp.hpp"
+
 typedef pcl::PointXYZ PointT;
 typedef pcl::PointCloud<PointT> PointCloudT;
 
@@ -85,28 +87,37 @@ int main(int argc, char* argv[])
     // Executing the transformation
     pcl::transformPointCloud(*cloud_in, *cloud_icp, transformation_matrix);
 
+    // MatrixXf source_matrix = cloud_icp->getMatrixXfMap(3,4,0).transpose();
+    // MatrixXf target_matrix = cloud_in->getMatrixXfMap(3,4,0).transpose();
+
     // The Iterative Closest Point algorithm
     time.tic();
-    pcl::IterativeClosestPoint<PointT, PointT> icp;
-    icp.setMaximumIterations(iterations);
-    icp.setInputSource(cloud_icp);
-    icp.setInputTarget(cloud_in);
+    // pcl::IterativeClosestPoint<PointT, PointT> icp;
+    // icp.setMaximumIterations(iterations);
+    // icp.setInputSource(cloud_icp);
+    // icp.setInputTarget(cloud_in);
+    // icp.align(*cloud_icp);
+    // icp.setMaximumIterations(1);  // We set this variable to 1 for the next time we will call .align() function
+    // PointCloudT::Ptr cloud_source_trans (new pcl::PointCloudT());
+    ICP icp = ICP(cloud_in, cloud_icp, iterations);
     icp.align(*cloud_icp);
-    icp.setMaximumIterations(1);  // We set this variable to 1 for the next time we will call .align() function
+    icp.setMaximumIterations(1);
+
     std::cout << "Applied " << iterations << " ICP iteration(s) in " << time.toc() << " ms" << std::endl;
 
-    if(icp.hasConverged())
-    {
-        std::cout << "\nICP has converged, score is " << icp.getFitnessScore() << std::endl;
-        std::cout << "\nICP transformation " << iterations << " : cloud_icp -> cloud_in" << std::endl;
-        transformation_matrix = icp.getFinalTransformation().cast<double>();
-        print4x4Matrix(transformation_matrix);
-    }
-    else
-    {
-        PCL_ERROR("\nICP has not converged.\n");
-        return(-1);
-    }
+    // if(icp.hasConverged())
+    // {
+    //     std::cout << "\nICP has converged, score is " << icp.getFitnessScore() << std::endl;
+    //     std::cout << "\nICP transformation " << iterations << " : cloud_icp -> cloud_in" << std::endl;
+    //     transformation_matrix = icp.getFinalTransformation().cast<double>();
+    //     print4x4Matrix(transformation_matrix);
+    // }
+    // else
+    // {
+    //     PCL_ERROR("\nICP has not converged.\n");
+    //     return(-1);
+    // }
+
     // Visualization
     pcl::visualization::PCLVisualizer viewer("ICP demo");
     // Create two vertically separated viewports
@@ -163,27 +174,40 @@ int main(int argc, char* argv[])
             // The Iterative Closest Point algorithm
             time.tic();
             icp.align(*cloud_icp);
+            // icp.align(*cloud_icp);
             std::cout << "Applied 1 ICP iteration in " << time.toc() << " ms" << std::endl;
 
-            if(icp.hasConverged())
-            {
-                printf("\033[11A");  // Go up 11 lines in terminal output.
-                printf("\nICP has converged, score is %+.0e\n", icp.getFitnessScore ());
-                std::cout << "\nICP transformation " << ++iterations << " : cloud_icp -> cloud_in" << std::endl;
-                transformation_matrix *= icp.getFinalTransformation().cast<double>();  // WARNING /!\ This is not accurate! For "educational" purpose only!
-                print4x4Matrix(transformation_matrix);  // Print the transformation between original pose and current pose
+            // printf("\033[11A");  // Go up 11 lines in terminal output.
+            // printf("\nICP has converged, score is %+.0e\n", icp.getFitnessScore ());
+            std::cout << "\nICP transformation " << ++iterations << " : cloud_icp -> cloud_in" << std::endl;
+            // transformation_matrix *= icp.getFinalTransformation().cast<double>();  // WARNING /!\ This is not accurate! For "educational" purpose only!
+            // print4x4Matrix(transformation_matrix);  // Print the transformation between original pose and current pose
 
-                ss.str("");
-                ss << iterations;
-                std::string iterations_cnt = "ICP iterations = " + ss.str();
-                viewer.updateText(iterations_cnt, 10, 60, 16, txt_gray_lvl, txt_gray_lvl, txt_gray_lvl, "iterations_cnt");
-                viewer.updatePointCloud(cloud_icp, cloud_icp_color_h, "cloud_icp_v2");
-            }
-            else
-            {
-                PCL_ERROR("\nICP has not converged.\n");
-                return (-1);
-            }
+            ss.str("");
+            ss << iterations;
+            std::string iterations_cnt = "ICP iterations = " + ss.str();
+            viewer.updateText(iterations_cnt, 10, 60, 16, txt_gray_lvl, txt_gray_lvl, txt_gray_lvl, "iterations_cnt");
+            viewer.updatePointCloud(cloud_icp, cloud_icp_color_h, "cloud_icp_v2");
+
+            // if(icp.hasConverged())
+            // {
+            //     printf("\033[11A");  // Go up 11 lines in terminal output.
+            //     printf("\nICP has converged, score is %+.0e\n", icp.getFitnessScore ());
+            //     std::cout << "\nICP transformation " << ++iterations << " : cloud_icp -> cloud_in" << std::endl;
+            //     transformation_matrix *= icp.getFinalTransformation().cast<double>();  // WARNING /!\ This is not accurate! For "educational" purpose only!
+            //     print4x4Matrix(transformation_matrix);  // Print the transformation between original pose and current pose
+
+            //     ss.str("");
+            //     ss << iterations;
+            //     std::string iterations_cnt = "ICP iterations = " + ss.str();
+            //     viewer.updateText(iterations_cnt, 10, 60, 16, txt_gray_lvl, txt_gray_lvl, txt_gray_lvl, "iterations_cnt");
+            //     viewer.updatePointCloud(cloud_icp, cloud_icp_color_h, "cloud_icp_v2");
+            // }
+            // else
+            // {
+            //     PCL_ERROR("\nICP has not converged.\n");
+            //     return (-1);
+            // }
         }
         next_iteration = false;
     }
