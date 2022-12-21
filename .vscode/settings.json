@@ -94,6 +94,9 @@
         "span": "cpp",
         "valarray": "cpp",
         "*.ipp": "cpp",
-        "ranges": "cpp"
+        "ranges": "cpp",
+        "any": "cpp",
+        "csignal": "cpp",
+        "future": "cpp"
     }
 }

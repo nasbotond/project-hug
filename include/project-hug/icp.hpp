@@ -28,31 +28,11 @@ typedef struct
 	int iter;
 } ICP_OUT;
 
-/*
-	The nearest neighbor point
-	distance: the distence between src_matrix[sourceIndex] 
-			  and dst_matrix[targetIndex]
-*/
 typedef struct
 {
-	int sourceIndex;
-	int targetIndex;
-	float distance;
-} Align;
-
-/*
-	The k nearest neighbor points
-	distances[i]: the distence between src_matrix[sourceIndex] 
-			  	  and dst_matrix[targetIndexes[i]]
-			      i := 1~K
-*/
-typedef struct
-{
-	int sourceIndex;
-	std::vector<int> targetIndexes;
-	std::vector<float> distances;
-	float distanceMean;
-} KNeighbor;
+    std::vector<float> distances;
+    std::vector<int> indices;
+} NEIGHBOR;
 
 
 class ICP
@@ -66,18 +46,16 @@ class ICP
 
         // Main functions
         Matrix4d best_fit_transform(const MatrixXd &A, const MatrixXd &B);
-        Matrix4d best_fit_transform(const MatrixXd &A, const MatrixXd &B, std::vector<KNeighbor> neighbors, int remainPercentage=100, int K=5);
-        std::vector<KNeighbor> k_nearest_neighbors(const MatrixXd& source, const MatrixXd& target, float leaf_size=10, int K=5);
         ICP_OUT icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5);
         void align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_);
+        NEIGHBOR nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
 
         // Helper functions
         float dist(const Vector3d &a, const Vector3d &b);
         void setMaximumIterations(int iter);
-        // int cmpKNeighbor(const void *a, const void *b);
 
         // Variables
         int max_iter;
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in; //(new pcl::PointCloud<pcl::PointXYZ>);  // Original point cloud
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp; //(new pcl::PointCloud<pcl::PointXYZ>);  // ICP output point cloud
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in; // Original point cloud
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_icp; // ICP output point cloud
 };
