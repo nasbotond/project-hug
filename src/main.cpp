@@ -101,7 +101,7 @@ int main(int argc, char* argv[])
     // PointCloudT::Ptr cloud_source_trans (new pcl::PointCloudT());
     ICP icp = ICP(cloud_in, cloud_icp, iterations);
     icp.align(*cloud_icp);
-    icp.setMaximumIterations(1);
+    icp.set_maximum_iterations(1);
 
     std::cout << "Applied " << iterations << " ICP iteration(s) in " << time.toc() << " ms" << std::endl;
 
