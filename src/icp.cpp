@@ -287,11 +287,12 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	// When the number of iterations is less than the maximum
 	for(iter=0; iter<max_iteration; iter++)
 	{
-        neighbor = nearest_neighbor(src3d.transpose(),B);
+        // neighbor = nearest_neighbor(src3d.transpose(), B);
+		neighbor = nearest_neighbor_kdtree(src3d.transpose(), B);
 
         for(int j=0; j<row; j++)
 		{
-            dst_chorder.block<3,1>(0,j) = dst.block<3,1>(0,neighbor.indices[j]);
+            dst_chorder.block<3,1>(0,j) = dst.block<3,1>(0, neighbor.indices[j]);
         }
 
 		// save the transformed matrix in this iteration
@@ -305,7 +306,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
             src3d.block<3,1>(0,j) = src.block<3,1>(0,j);
         }
 
-        mean_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
+        mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(),0.0)/neighbor.distances.size();
         std::cout << "error: " << prev_error - mean_error <<std::endl;
         if (abs(prev_error - mean_error) < tolerance)
         {
@@ -314,7 +315,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
         prev_error = mean_error;
 	}
 
-    T = best_fit_transform_SVD(A, src3d.transpose());
+    T = best_fit_transform_quat(A, src3d.transpose());
 
 	result.trans = T;
 	result.distances = neighbor.distances;
@@ -364,7 +365,7 @@ void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
     cloud_icp_ = temp_cloud;
 }
 
-NEIGHBOR ICP::nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst)
+NEIGHBOR ICP::nearest_neighbor_naive(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst)
 {
     int row_src = src.rows();
     int row_dst = dst.rows();
@@ -399,4 +400,49 @@ NEIGHBOR ICP::nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd
     }
 
     return neigh;
+}
+
+NEIGHBOR ICP::nearest_neighbor_kdtree(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst)
+{
+    int row_dst = dst.rows();
+    NEIGHBOR neigh;
+
+	using matrix_t = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    matrix_t mat = src;
+
+	using my_kd_tree_t = nanoflann::KDTreeEigenMatrixAdaptor<matrix_t, SAMPLES_DIM /*fixed size*/, nanoflann::metric_L2>;
+	my_kd_tree_t mat_index(SAMPLES_DIM, std::cref(mat), 10 /* max leaf */);
+
+	for(int i = 0; i < row_dst; ++i)
+	{
+		std::vector<double> query_pt(SAMPLES_DIM);
+		for(size_t d = 0; d < SAMPLES_DIM; d++)
+		{
+			query_pt[d] = dst(i,d);
+		}
+
+		// do a knn search
+    	const size_t num_results = 1;
+    	std::vector<size_t> ret_indexes(num_results);
+    	std::vector<double> out_dists_sqr(num_results);
+
+		nanoflann::KNNResultSet<double> resultSet(num_results);
+		resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
+
+		mat_index.index_->findNeighbors(resultSet, &query_pt[0]);
+
+		// std::cout << "knnSearch(nn=" << num_results << "): \n";
+
+		// for(size_t i = 0; i < resultSet.size(); i++)
+		// {
+		// 	std::cout << "ret_index[" << i << "]=" << ret_indexes[i]
+		// 			<< " out_dist_sqr=" << out_dists_sqr[i] << std::endl;
+		// }		
+
+		neigh.distances.push_back(out_dists_sqr[0]);
+        neigh.indices.push_back(ret_indexes[0]);
+	}
+
+	return neigh;
 }

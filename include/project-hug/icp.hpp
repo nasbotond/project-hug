@@ -15,6 +15,8 @@
 using namespace Eigen;
 using namespace nanoflann;
 
+constexpr int SAMPLES_DIM = 3;
+
 /*
 	The output of ICP algorithm
 	trans : transformation for best align
@@ -32,6 +34,7 @@ typedef struct
 {
     std::vector<float> distances;
     std::vector<int> indices;
+    std::vector<int> trim;
 } NEIGHBOR;
 
 
@@ -49,10 +52,11 @@ class ICP
         Matrix4d best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B);
         ICP_OUT icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5);
         void align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_);
-        NEIGHBOR nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
+        NEIGHBOR nearest_neighbor_naive(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
+        NEIGHBOR nearest_neighbor_kdtree(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
 
         // Helper functions
-        float dist(const Vector3d &a, const Vector3d &b);
+        float dist(const Vector3d &a, const Vector3d &b); // for naive nearest neighbor
         void setMaximumIterations(int iter);
 
         // Variables
