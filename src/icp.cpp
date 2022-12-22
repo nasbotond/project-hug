@@ -50,7 +50,7 @@ void ICP::setMaximumIterations(int iter)
 		R = U*Vt
 		t = centroid_B-R*centroid_A
 */
-Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B)
+Matrix4d ICP::best_fit_transform_SVD(const MatrixXd &A, const MatrixXd &B)
 {
 	size_t row = std::min(A.rows(), B.rows());
 
@@ -113,6 +113,122 @@ Matrix4d ICP::best_fit_transform(const MatrixXd &A, const MatrixXd &B)
 
 	T.block<3,3>(0,0) = R;
 	T.block<3,1>(0,3) = t;
+
+	std::cout << T << std::endl;
+
+	return T;
+}
+
+Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
+{
+	size_t row = std::min(A.rows(), B.rows());
+
+	Vector3d centroid_A(0, 0, 0);
+	Vector3d centroid_B(0, 0, 0);
+	
+	MatrixXd AA;
+	MatrixXd BB;
+	if(A.rows() > B.rows())
+    {
+        AA = BB = B;
+    }
+	else
+    {
+        BB = AA = A;
+    }
+
+	Matrix4d T = MatrixXd::Identity(4, 4);
+
+	for(int i=0; i<row; i++)
+	{
+		centroid_A += A.block<1,3>(i,0).transpose();
+		centroid_B += B.block<1,3>(i,0).transpose();
+	}
+
+	centroid_A /= row;
+	centroid_B /= row;
+
+	for(int i=0; i<row; i++)
+	{
+		AA.block<1,3>(i,0) = A.block<1,3>(i,0)-centroid_A.transpose();
+		BB.block<1,3>(i,0) = B.block<1,3>(i,0)-centroid_B.transpose();
+	}
+
+	MatrixXd H = AA.transpose()*BB; // 3x3 covariance matrix
+	MatrixXd As = H - H.transpose(); // anti-symmetric matrix
+
+	Vector3d delta(As(1,2), As(2,0), As(0,1));
+
+	MatrixXd Q = MatrixXd::Zero(4, 4);
+	MatrixXd temp = MatrixXd::Zero(3, 3);
+	MatrixXd traceEye = temp;
+	double cov_trace = H.trace();
+
+	for (int r = 0; r < traceEye.rows(); r++) 
+	{
+		for (int c = 0; c < traceEye.cols(); c++) 
+		{
+			if (r == c) 
+			{
+				traceEye(r, c) = cov_trace;
+			}
+		}
+	}
+
+	temp = H + H.transpose() - traceEye;
+
+	Q(0, 0) = cov_trace;
+	Q.block<1,3>(0,1) = delta.transpose();
+	Q.block<3,1>(1,0) = delta;	
+
+	Q.block<1,3>(1,1) = temp.block<1,3>(0,0);
+	Q.block<1,3>(2,1) = temp.block<1,3>(1,0);
+	Q.block<1,3>(3,1) = temp.block<1,3>(2,0);
+
+	EigenSolver<MatrixXd> es(Q);
+	VectorXd eVals = es.eigenvalues().real();
+	MatrixXd eVecs = es.eigenvectors().real();
+
+	// std::cout << "The eigenvalues of Q are:" << std::endl << eVals << std::endl;
+	// std::cout << "The matrix of eigenvectors, V, is:" << std::endl << eVecs << std::endl << std::endl;
+
+	// get location of maximum
+  	Eigen::Index maxRow, maxCol;
+  	// std::complex<double> max = eVals.maxCoeff(&maxRow, &maxCol);
+	double max = eVals.maxCoeff(&maxRow, &maxCol);
+
+	// std::cout << "The max eigenvalue: " << max << ", with position: " << maxRow << "," << maxCol << std::endl;
+
+	VectorXd maxVecs = eVecs.col(maxRow);
+
+	MatrixXd R = MatrixXd::Zero(3, 3);
+
+	double q0 = maxVecs(0, 0);
+	double q1 = maxVecs(1, 0);
+	double q2 = maxVecs(2, 0);
+	double q3 = maxVecs(3, 0);
+
+	R(0, 0) = q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3;
+	R(0, 1) = 2 * (q1 * q2 - q0 * q3);
+	R(0, 2) = 2 * (q1 * q3 + q0 * q2);
+
+	R(1, 0) = 2 * (q1 * q2 + q0 * q3);
+	R(1, 1) = q0 * q0 + q2 * q2 - q1 * q1 - q3 * q3;
+	R(1, 2) = 2 * (q2 * q3 - q0 * q1);
+
+	R(2, 0) = 2 * (q1 * q3 - q0 * q2);
+	R(2, 1) = 2 * (q2 * q3 + q0 * q1);
+	R(2, 2) = q0 * q0 + q3 * q3 - q1 * q1 - q2 * q2;
+
+	Vector3d t = Vector3d::Zero(3, 1);
+
+	t = centroid_B - (R * centroid_A);
+
+	T.block<3,3>(0,0) = R;
+	T.block<3,1>(0,3) = t;
+
+	std::cout << T << std::endl;
+
 	return T;
 }
 
@@ -173,12 +289,14 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	{
         neighbor = nearest_neighbor(src3d.transpose(),B);
 
-        for(int j=0; j<row; j++){
+        for(int j=0; j<row; j++)
+		{
             dst_chorder.block<3,1>(0,j) = dst.block<3,1>(0,neighbor.indices[j]);
         }
 
 		// save the transformed matrix in this iteration
-        T = best_fit_transform(src3d.transpose(), dst_chorder.transpose());
+		T = best_fit_transform_quat(src3d.transpose(), dst_chorder.transpose());
+        // T = best_fit_transform_SVD(src3d.transpose(), dst_chorder.transpose());
 		src = T*src;
 
 		// copy the transformed matrix
@@ -196,7 +314,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
         prev_error = mean_error;
 	}
 
-    T = best_fit_transform(A, src3d.transpose());
+    T = best_fit_transform_SVD(A, src3d.transpose());
 
 	result.trans = T;
 	result.distances = neighbor.distances;
@@ -259,15 +377,15 @@ NEIGHBOR ICP::nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd
 
     for(int ii=0; ii < row_src; ii++)
     {
-        vec_src = src.block<1,3>(ii,0).transpose();
+        vec_src = src.block<1,3>(ii, 0).transpose();
         min = 100;
         index = 0;
         dist_temp = 0;
         for(int jj=0; jj < row_dst; jj++)
         {
-            vec_dst = dst.block<1,3>(jj,0).transpose();
-            dist_temp = dist(vec_src,vec_dst);
-            if (dist_temp < min)
+            vec_dst = dst.block<1,3>(jj, 0).transpose();
+            dist_temp = dist(vec_src, vec_dst);
+            if(dist_temp < min)
             {
                 min = dist_temp;
                 index = jj;
