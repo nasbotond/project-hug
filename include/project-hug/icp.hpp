@@ -34,9 +34,25 @@ typedef struct
 {
     std::vector<float> distances;
     std::vector<int> indices;
-    std::vector<int> trim;
+    std::vector<int> src_indices;
 } NEIGHBOR;
 
+template <typename T, typename Compare>
+std::vector<std::size_t> sort_permutation(const std::vector<T>& vec, Compare compare)
+{
+    std::vector<std::size_t> p(vec.size());
+    std::iota(p.begin(), p.end(), 0);
+    std::sort(p.begin(), p.end(), [&](std::size_t i, std::size_t j){ return compare(vec[i], vec[j]); });
+    return p;
+}
+
+template <typename T>
+std::vector<T> apply_permutation(const std::vector<T>& vec, const std::vector<std::size_t>& p)
+{
+    std::vector<T> sorted_vec(vec.size());
+    std::transform(p.begin(), p.end(), sorted_vec.begin(),[&](std::size_t i){ return vec[i]; });
+    return sorted_vec;
+}
 
 class ICP
 {
@@ -58,6 +74,8 @@ class ICP
         // Helper functions
         float dist(const Vector3d &a, const Vector3d &b); // for naive nearest neighbor
         void setMaximumIterations(int iter);
+        double trimmed_mse(double overlap, NEIGHBOR n);
+        double get_overlap_parameter(NEIGHBOR n);
 
         // Variables
         int max_iter;

@@ -154,6 +154,8 @@ Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
 		BB.block<1,3>(i,0) = B.block<1,3>(i,0)-centroid_B.transpose();
 	}
 
+	// if TrICP then only use overlapped points for covariance matrix calculation (overlap*rows)
+
 	MatrixXd H = AA.transpose()*BB; // 3x3 covariance matrix
 	MatrixXd As = H - H.transpose(); // anti-symmetric matrix
 
@@ -276,7 +278,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 
 	for(int i=0; i<row; i++)
 	{
-		src.block<3,1>(0,i) = A.block<1,3>(i,0).transpose(); // line 4 for t:translate
+		src.block<3,1>(0,i) = A.block<1,3>(i,0).transpose();
 		src3d.block<3,1>(0,i) = A.block<1,3>(i,0).transpose(); // save the temp data
 		dst.block<3,1>(0,i) = B.block<1,3>(i,0).transpose();
 	}
@@ -289,6 +291,21 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	{
         // neighbor = nearest_neighbor(src3d.transpose(), B);
 		neighbor = nearest_neighbor_kdtree(src3d.transpose(), B);
+
+		// sort vectors
+		// std::cout << "Before: " << neighbor.src_indices[0] << std::endl;
+
+		// std::vector<float> dist = neighbor.distances;
+		// std::vector<int> dst_ind = neighbor.indices;
+		// std::vector<int> src_ind = neighbor.src_indices;
+
+		// auto p = sort_permutation(dist, [](float const& a, float const& b){ return a < b; });
+
+		// neighbor.distances = apply_permutation(dist, p);
+		// neighbor.indices = apply_permutation(dst_ind, p);
+		// neighbor.src_indices = apply_permutation(src_ind, p);
+
+		// std::cout << "After: " << neighbor.src_indices[0] << std::endl;
 
         for(int j=0; j<row; j++)
 		{
@@ -306,7 +323,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
             src3d.block<3,1>(0,j) = src.block<3,1>(0,j);
         }
 
-        mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(),0.0)/neighbor.distances.size();
+        mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
         std::cout << "error: " << prev_error - mean_error <<std::endl;
         if (abs(prev_error - mean_error) < tolerance)
         {
@@ -392,11 +409,10 @@ NEIGHBOR ICP::nearest_neighbor_naive(const Eigen::MatrixXd &src, const Eigen::Ma
                 index = jj;
             }
         }
-        // cout << min << " " << index << endl;
-        // neigh.distances[ii] = min;
-        // neigh.indices[ii] = index;
+
         neigh.distances.push_back(min);
         neigh.indices.push_back(index);
+		neigh.src_indices.push_back(ii);
     }
 
     return neigh;
@@ -430,19 +446,63 @@ NEIGHBOR ICP::nearest_neighbor_kdtree(const Eigen::MatrixXd &src, const Eigen::M
 		nanoflann::KNNResultSet<double> resultSet(num_results);
 		resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
 
-		mat_index.index_->findNeighbors(resultSet, &query_pt[0]);
-
-		// std::cout << "knnSearch(nn=" << num_results << "): \n";
-
-		// for(size_t i = 0; i < resultSet.size(); i++)
-		// {
-		// 	std::cout << "ret_index[" << i << "]=" << ret_indexes[i]
-		// 			<< " out_dist_sqr=" << out_dists_sqr[i] << std::endl;
-		// }		
+		mat_index.index_->findNeighbors(resultSet, &query_pt[0]);		
 
 		neigh.distances.push_back(out_dists_sqr[0]);
         neigh.indices.push_back(ret_indexes[0]);
+		neigh.src_indices.push_back(i);
 	}
 
 	return neigh;
+}
+
+/* Golden-section Search  https://en.wikipedia.org/wiki/Golden-section_search */
+double ICP::get_overlap_parameter(NEIGHBOR n)
+{
+	double overlapParam = 0.0;
+	double minOverlap = 0.4;
+	double lambda = 2.0;
+	double objectiveFun = 0, objectiveFunNext = 0, objectiveFunPrev = 0;
+	bool overlapParamFound = false;
+	double overlapIt = 0.01;
+	int count = 1;
+
+	while (minOverlap <= 1.0 && !overlapParamFound) 
+	{
+		double trimmedMSEPrev = trimmed_mse(minOverlap - overlapIt, n);
+		double trimmedMSE = trimmed_mse(minOverlap, n);
+		double trimmedMSENext = trimmed_mse(minOverlap + overlapIt, n);
+		objectiveFun = trimmedMSE * (1 / pow(minOverlap, lambda + 1));
+		objectiveFunPrev = trimmedMSEPrev * (1 / pow((minOverlap - overlapIt), lambda + 1));
+		objectiveFunNext = trimmedMSENext * (1 / pow((minOverlap + overlapIt), lambda + 1));
+
+		if((objectiveFun < objectiveFunPrev) && (objectiveFunNext > objectiveFun)) 
+		{
+			return minOverlap;
+			overlapParamFound = true;
+			std::cout << "overlap parameter found with value : " << objectiveFun 
+				 << " for overlap function : " << std::endl;
+			break;
+		}
+		else 
+		{
+			minOverlap += overlapIt;
+			overlapParamFound = false;
+			count++;
+		}
+	}
+	std::cout << "optimum overlap couldn't be found" << std::endl;
+	return minOverlap;
+}
+
+double ICP::trimmed_mse(double overlap, NEIGHBOR n) 
+{
+	double trimmedMSE = 0;
+	int length = overlap * n.distances.size();
+	for(int i = 0; i < length; i++)
+	{
+		trimmedMSE += n.distances[i];
+	}
+	trimmedMSE /= length;
+	return trimmedMSE;
 }
