@@ -67,7 +67,7 @@ class ICP
         Matrix4d best_fit_transform_SVD(const MatrixXd &A, const MatrixXd &B);
         Matrix4d best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B);
         ICP_OUT icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5);
-        ICP_OUT tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5);
+        ICP_OUT tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, float min_mse, int leaf_size=10, int Ksearch=5);
         void align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_);
         NEIGHBORS nearest_neighbor_naive(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
         NEIGHBORS nearest_neighbor_kdtree(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);

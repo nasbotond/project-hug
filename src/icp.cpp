@@ -36,7 +36,7 @@ Matrix4d ICP::best_fit_transform_SVD(const MatrixXd &A, const MatrixXd &B)
 
 	Matrix4d T = MatrixXd::Identity(4, 4);
 
-	for(int i = 0; i < num_rows; i++)
+	for(int i = 0; i < num_rows; ++i)
 	{
 		centroid_A += A.block<1,3>(i,0).transpose();
 		centroid_B += B.block<1,3>(i,0).transpose();
@@ -45,7 +45,7 @@ Matrix4d ICP::best_fit_transform_SVD(const MatrixXd &A, const MatrixXd &B)
 	centroid_A /= num_rows;
 	centroid_B /= num_rows;
 
-	for(int i = 0; i < num_rows; i++)
+	for(int i = 0; i < num_rows; ++i)
 	{
 		AA.block<1,3>(i, 0) = A.block<1,3>(i, 0) - centroid_A.transpose();
 		BB.block<1,3>(i, 0) = B.block<1,3>(i, 0) - centroid_B.transpose();
@@ -80,7 +80,7 @@ Matrix4d ICP::best_fit_transform_SVD(const MatrixXd &A, const MatrixXd &B)
 	T.block<3,3>(0, 0) = R;
 	T.block<3,1>(0, 3) = t;
 
-	std::cout << T << std::endl;
+	std::cout << "\n" << T << "\n" << std::endl;
 
 	return T;
 }
@@ -193,7 +193,7 @@ Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
 	T.block<3,3>(0, 0) = R;
 	T.block<3,1>(0, 3) = t;
 
-	std::cout << T << std::endl;
+	std::cout << "\n" << T << "\n" << std::endl;
 
 	return T;
 }
@@ -244,10 +244,11 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 
         mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
 
-        std::cout << "error: " << prev_error - mean_error <<std::endl;
+        std::cout << "Error: " << prev_error - mean_error <<std::endl;
 
         if(abs(prev_error - mean_error) < tolerance)
         {
+			std::cout << "ICP has converged in: " << iter << " iterations" <<std::endl;
             break;
         }
         prev_error = mean_error;
@@ -262,7 +263,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	return result;
 }
 
-ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size, int Ksearch)
+ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, float min_mse, int leaf_size, int Ksearch)
 {
 	size_t row = std::min(A.rows(), B.rows());
 	MatrixXd src = MatrixXd::Ones(3+1, row);
@@ -283,7 +284,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 	}
 
 	double prev_error = 0;
-	double mean_error = 0;
+	double mse = 0;
 
 	// when the number of iterations is less than the maximum
 	for(iter = 0; iter < max_iteration; ++iter)
@@ -332,17 +333,23 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
             src3d.block<3,1>(0, j) = src.block<3,1>(0, j);
         }
 
-        mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
-		double trimmed_mse_error = trimmed_mse(o, neighbor.distances);
+        double mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
+		mse = trimmed_mse(o, neighbor.distances);
 
-        std::cout << "error: " << prev_error - mean_error <<std::endl;
-		std::cout << "Trimmed MSE error: " << trimmed_mse_error <<std::endl;
+        std::cout << "Mean distance error: " << mean_error <<std::endl;
+		std::cout << "Trimmed MSE: " << mse <<std::endl;
 
-        if(abs(prev_error - mean_error) < tolerance)
+        if(abs(prev_error - mse) < tolerance)
         {
+			std::cout << "TrICP has converged in: " << iter << " iterations due to small relative change in error" <<std::endl;
             break;
         }
-        prev_error = mean_error;
+		if(mse < min_mse)
+        {
+			std::cout << "TrICP has converged in: " << iter << " iterations" <<std::endl;
+            break;
+        }
+        prev_error = mse;
 	}
 
     T = best_fit_transform_quat(A, src3d.transpose());
@@ -360,10 +367,11 @@ void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
     MatrixXf target_matrix = cloud_in->getMatrixXfMap(3, 4, 0).transpose();
 
     float tolerance = 0.000001;
+	float min_mse = 0.00001;
 
     // call icp
     // ICP_OUT icp_result = icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance);
-	ICP_OUT icp_result = tr_icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance);
+	ICP_OUT icp_result = tr_icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance, min_mse);
 
     int iter = icp_result.iter;
     Matrix4f T = icp_result.trans_mat.cast<float>();

@@ -90,6 +90,7 @@ int main(int argc, char* argv[])
     // MatrixXf source_matrix = cloud_icp->getMatrixXfMap(3,4,0).transpose();
     // MatrixXf target_matrix = cloud_in->getMatrixXfMap(3,4,0).transpose();
 
+    ICP icp = ICP(cloud_in, cloud_icp, iterations);
     // The Iterative Closest Point algorithm
     time.tic();
     // pcl::IterativeClosestPoint<PointT, PointT> icp;
@@ -99,11 +100,10 @@ int main(int argc, char* argv[])
     // icp.align(*cloud_icp);
     // icp.setMaximumIterations(1);  // We set this variable to 1 for the next time we will call .align() function
     // PointCloudT::Ptr cloud_source_trans (new pcl::PointCloudT());
-    ICP icp = ICP(cloud_in, cloud_icp, iterations);
     icp.align(*cloud_icp);
-    icp.set_maximum_iterations(1);
-
     std::cout << "Applied " << iterations << " ICP iteration(s) in " << time.toc() << " ms" << std::endl;
+
+    icp.set_maximum_iterations(1);
 
     // if(icp.hasConverged())
     // {
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
     // }
 
     // Visualization
-    pcl::visualization::PCLVisualizer viewer("ICP demo");
+    pcl::visualization::PCLVisualizer viewer("ICP");
     // Create two vertically separated viewports
     int v1(0);
     int v2(1);
