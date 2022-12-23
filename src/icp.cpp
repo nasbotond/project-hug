@@ -80,7 +80,7 @@ Matrix4d ICP::best_fit_transform_SVD(const MatrixXd &A, const MatrixXd &B)
 	T.block<3,3>(0, 0) = R;
 	T.block<3,1>(0, 3) = t;
 
-	std::cout << "\n" << T << "\n" << std::endl;
+	// std::cout << "\n" << T << "\n" << std::endl;
 
 	return T;
 }
@@ -193,13 +193,15 @@ Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
 	T.block<3,3>(0, 0) = R;
 	T.block<3,1>(0, 3) = t;
 
-	std::cout << "\n" << T << "\n" << std::endl;
+	// std::cout << "\n" << T << "\n" << std::endl;
 
 	return T;
 }
 
 ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size, int Ksearch)
 {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	size_t row = std::min(A.rows(),B.rows());
 	MatrixXd src = MatrixXd::Ones(3+1,row);
 	MatrixXd src3d = MatrixXd::Ones(3,row);
@@ -210,7 +212,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	ICP_OUT result;
 	int iter;
 
-	for(int i=0; i<row; i++)
+	for(int i = 0; i < row; i++)
 	{
 		src.block<3,1>(0, i) = A.block<1,3>(i, 0).transpose();
 		src3d.block<3,1>(0, i) = A.block<1,3>(i, 0).transpose(); // save the temp data
@@ -221,8 +223,11 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	double mean_error = 0;
 
 	// when the number of iterations is less than the maximum
-	for(iter = 0; iter < max_iteration; ++iter)
+	for(iter = 1; iter <= max_iteration; ++iter)
 	{
+		std::cout << "----------------" << std::endl;
+		std::cout << "Iteration: " << iter << std::endl;
+
         // neighbor = nearest_neighbor(src3d.transpose(), B);
 		neighbor = nearest_neighbor_kdtree(src3d.transpose(), B);
 
@@ -244,7 +249,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 
         mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
 
-        std::cout << "Error: " << prev_error - mean_error <<std::endl;
+        std::cout << "Mean distance error: " << abs(prev_error - mean_error) <<std::endl;
 
         if(abs(prev_error - mean_error) < tolerance)
         {
@@ -254,17 +259,28 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
         prev_error = mean_error;
 	}
 
+	if(iter == max_iter)
+	{
+		std::cout << "ICP has reached maximum iterations" <<std::endl;
+	}
+
+	auto finish = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
+	std::cout << "Convergence in " << static_cast<double>(duration.count())/1000 << " milliseconds and " << iter << " iterations" << std::endl;
+
     T = best_fit_transform_quat(A, src3d.transpose());
 
 	result.trans_mat = T;
 	result.distances = neighbor.distances;
-	result.iter = iter+1;
+	result.iter = iter;
 
 	return result;
 }
 
 ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, float min_mse, int leaf_size, int Ksearch)
 {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	size_t row = std::min(A.rows(), B.rows());
 	MatrixXd src = MatrixXd::Ones(3+1, row);
 	MatrixXd src3d = MatrixXd::Ones(3, row);
@@ -287,14 +303,15 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 	double mse = 0;
 
 	// when the number of iterations is less than the maximum
-	for(iter = 0; iter < max_iteration; ++iter)
+	for(iter = 1; iter <= max_iteration; ++iter)
 	{
-        // neighbor = nearest_neighbor(src3d.transpose(), B);
+		std::cout << "----------------" << std::endl;
+		std::cout << "Iteration: " << iter << std::endl;
+
+        // neighbor = nearest_neighbor_naive(src3d.transpose(), B);
 		neighbor = nearest_neighbor_kdtree(src3d.transpose(), B);
 
 		// sort vectors
-		// std::cout << "Before: " << neighbor.src_indices[0] << std::endl;
-
 		std::vector<float> dist = neighbor.distances;
 		std::vector<int> dst_ind = neighbor.B_indices;
 		std::vector<int> src_ind = neighbor.A_indices;
@@ -304,8 +321,6 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 		neighbor.distances = apply_permutation(dist, p);
 		neighbor.B_indices = apply_permutation(dst_ind, p);
 		neighbor.A_indices = apply_permutation(src_ind, p);
-
-		// std::cout << "After: " << neighbor.src_indices[0] << std::endl;
 
 		double o = get_overlap_parameter(neighbor.distances);
 		int trimmed_length = (int)(o*row);
@@ -352,11 +367,20 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
         prev_error = mse;
 	}
 
+	if(iter == max_iter)
+	{
+		std::cout << "TrICP has reached maximum iterations" <<std::endl;
+	}
+
+	auto finish = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
+	std::cout << "Convergence in " << static_cast<double>(duration.count())/1000 << " milliseconds and " << iter << " iterations" << std::endl;
+
     T = best_fit_transform_quat(A, src3d.transpose());
 
 	result.trans_mat = T;
 	result.distances = neighbor.distances;
-	result.iter = iter+1;
+	result.iter = iter;
 
 	return result;
 }
@@ -373,7 +397,6 @@ void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
     // ICP_OUT icp_result = icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance);
 	ICP_OUT icp_result = tr_icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance, min_mse);
 
-    int iter = icp_result.iter;
     Matrix4f T = icp_result.trans_mat.cast<float>();
 
     MatrixXf source_trans_matrix = source_matrix;
