@@ -251,7 +251,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
             src3d.block<3,1>(0, j) = src.block<3,1>(0, j);
         }
 
-        mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
+        mean_error = sqrt(std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size());
 
         std::cout << "Mean distance error: " << abs(prev_error - mean_error) <<std::endl;
 
@@ -331,7 +331,6 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 		neighbor.A_indices = apply_permutation(src_ind, p);
 
 		double o = get_overlap_parameter(neighbor.distances);
-		std::cout << "Overlap parameter: " << o << std::endl;
 		int trimmed_length = (int)(o*row);
 
 		std::cout << "Number of points: " << row << std::endl;
@@ -357,8 +356,8 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
             src3d.block<3,1>(0, j) = src.block<3,1>(0, j);
         }
 
-        double mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
-		mse = trimmed_mse(o, neighbor.distances);
+        double mean_error = sqrt(std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size());
+		mse = sqrt(trimmed_mse(o, neighbor.distances));
 
         std::cout << "Mean distance error: " << mean_error <<std::endl;
 		std::cout << "Trimmed MSE: " << mse <<std::endl;
