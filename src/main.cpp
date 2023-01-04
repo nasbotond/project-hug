@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <random>
 
 #include <pcl/io/ply_io.h>
 #include <pcl/point_types.h>
@@ -41,17 +42,17 @@ int main(int argc, char* argv[])
     if(argc < 2)
     {
         printf("Usage :\n");
-        printf("\t\t%s file.ply number_of_ICP_iterations\n", argv[0]);
-        PCL_ERROR("Provide one ply file.\n");
+        printf("\t\t%s file.ply file.ply number_of_ICP_iterations\n", argv[0]);
+        PCL_ERROR("Provide two ply files.\n");
         return(-1);
     }
 
     int iterations = 1;  // Default number of ICP iterations
-    if(argc > 2)
+    if(argc > 3)
     {
         // If the user passed the number of iteration as an argument
-        iterations = atoi(argv[2]);
-        if (iterations < 1)
+        iterations = atoi(argv[3]);
+        if(iterations < 1)
         {
             PCL_ERROR("Number of initial iterations must be >= 1\n");
             return (-1);
@@ -67,25 +68,57 @@ int main(int argc, char* argv[])
     }
     std::cout << "\nLoaded file " << argv[1] << " (" << cloud_in->size() << " points) in " << time.toc() << " ms\n" << std::endl;
 
+    pcl::console::TicToc time1;
+    time1.tic();
+    if(pcl::io::loadPLYFile(argv[2], *cloud_icp) < 0)
+    {
+        PCL_ERROR("Error loading cloud %s.\n", argv[1]);
+        return (-1);
+    }
+    pcl::io::loadPLYFile(argv[2], *cloud_tr);
+    std::cout << "\nLoaded file " << argv[2] << " (" << cloud_icp->size() << " points) in " << time1.toc() << " ms\n" << std::endl;
+
     // Defining a rotation matrix and translation vector
     Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Identity();
 
     // A rotation matrix (see https://en.wikipedia.org/wiki/Rotation_matrix)
-    double theta = M_PI / 8;  // The angle of rotation in radians
+    double theta = M_PI / 16;  // The angle of rotation in radians
     transformation_matrix(0, 0) = std::cos(theta);
     transformation_matrix(0, 1) = -sin(theta);
     transformation_matrix(1, 0) = sin(theta);
     transformation_matrix(1, 1) = std::cos(theta);
 
     // A translation on Z axis (0.4 meters)
-    transformation_matrix(2, 3) = 0.4;
+    transformation_matrix(2, 3) = 0.04;
 
     // Display in terminal the transformation matrix
     std::cout << "Applying this rigid transformation to: cloud_in -> cloud_icp" << std::endl;
     print4x4Matrix(transformation_matrix);
 
+    pcl::transformPointCloud(*cloud_icp, *cloud_icp, transformation_matrix);
+    pcl::transformPointCloud(*cloud_tr, *cloud_tr, transformation_matrix);
+
     // Executing the transformation
-    pcl::transformPointCloud(*cloud_in, *cloud_icp, transformation_matrix);
+    // pcl::transformPointCloud(*cloud_in, *cloud_icp, transformation_matrix);
+    // pcl::transformPointCloud(*cloud_in, *cloud_tr, transformation_matrix);
+
+    // Add Gaussian noise
+    // const double mean = 0.0;
+    // const double stddev = 0.002;
+    // std::default_random_engine generator;
+    // std::normal_distribution<double> dist(mean, stddev);
+
+    // cloud_icp->points.resize(cloud_in->points.size());
+    // cloud_icp->header = cloud_in->header;
+    // cloud_icp->width = cloud_in->width;
+    // cloud_icp->height = cloud_in->height;
+
+    // for(size_t point_i = 0; point_i < cloud_in->points.size (); ++point_i)
+    // {
+    //     cloud_icp->points[point_i].x = cloud_in->points[point_i].x + static_cast<float>(dist(generator));
+    //     cloud_icp->points[point_i].y = cloud_in->points[point_i].y + static_cast<float>(dist(generator));
+    //     cloud_icp->points[point_i].z = cloud_in->points[point_i].z + static_cast<float>(dist(generator));
+    // }
 
     // MatrixXf source_matrix = cloud_icp->getMatrixXfMap(3,4,0).transpose();
     // MatrixXf target_matrix = cloud_in->getMatrixXfMap(3,4,0).transpose();

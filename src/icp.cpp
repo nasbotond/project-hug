@@ -60,8 +60,8 @@ Matrix4d ICP::best_fit_transform_SVD(const MatrixXd &A, const MatrixXd &B)
 	Vector3d t;
 	
 	JacobiSVD<MatrixXd> svd(H, ComputeFullU | ComputeFullV);
-	// JacobiSVD decomposition computes only the singular values by default. 
-	// ComputeFullU or ComputeFullV : ask for U or V explicitly.
+	// JacobiSVD decomposition computes only the singular values by default
+	// ComputeFullU or ComputeFullV : ask for U or V explicitly
 	U = svd.matrixU();
 	S = svd.singularValues();
 	V = svd.matrixV();
@@ -105,7 +105,7 @@ Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
 
 	Matrix4d T = MatrixXd::Identity(4, 4);
 
-	for(int i = 0; i < num_rows; i++)
+	for(int i = 0; i < num_rows; ++i)
 	{
 		centroid_A += A.block<1,3>(i, 0).transpose();
 		centroid_B += B.block<1,3>(i, 0).transpose();
@@ -114,7 +114,7 @@ Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
 	centroid_A /= num_rows;
 	centroid_B /= num_rows;
 
-	for(int i = 0; i < num_rows; i++)
+	for(int i = 0; i < num_rows; ++i)
 	{
 		AA.block<1,3>(i, 0) = A.block<1,3>(i, 0) - centroid_A.transpose();
 		BB.block<1,3>(i, 0) = B.block<1,3>(i, 0) - centroid_B.transpose();
@@ -193,7 +193,7 @@ Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
 	T.block<3,3>(0, 0) = R;
 	T.block<3,1>(0, 3) = t;
 
-	// std::cout << "\n" << T << "\n" << std::endl;
+	std::cout << "\n" << T << "\n" << std::endl;
 
 	return T;
 }
@@ -202,10 +202,10 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 {
 	auto start = std::chrono::high_resolution_clock::now();
 
-	size_t row = std::min(A.rows(),B.rows());
-	MatrixXd src = MatrixXd::Ones(3+1,row);
-	MatrixXd src3d = MatrixXd::Ones(3,row);
-	MatrixXd dst = MatrixXd::Ones(3+1,row);
+	size_t row = std::min(A.rows(), B.rows());
+	MatrixXd src = MatrixXd::Ones(3+1, row);
+	MatrixXd src3d = MatrixXd::Ones(3, row);
+	MatrixXd dst = MatrixXd::Ones(3+1, B.rows());
     NEIGHBORS neighbor;
   	Matrix4d T;
     Eigen::MatrixXd dst_chorder = Eigen::MatrixXd::Ones(3, row);
@@ -216,6 +216,10 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	{
 		src.block<3,1>(0, i) = A.block<1,3>(i, 0).transpose();
 		src3d.block<3,1>(0, i) = A.block<1,3>(i, 0).transpose(); // save the temp data
+	}
+
+	for(int i = 0; i < B.rows(); ++i)
+	{
 		dst.block<3,1>(0, i) = B.block<1,3>(i, 0).transpose();
 	}
 
@@ -228,7 +232,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 		std::cout << "----------------" << std::endl;
 		std::cout << "Iteration: " << iter << std::endl;
 
-        // neighbor = nearest_neighbor(src3d.transpose(), B);
+        // neighbor = nearest_neighbor_naive(src3d.transpose(), B);
 		neighbor = nearest_neighbor_kdtree(src3d.transpose(), B);
 
         for(int j = 0; j < row; ++j)
@@ -259,7 +263,7 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
         prev_error = mean_error;
 	}
 
-	if(iter == max_iter)
+	if(iter == max_iter+1)
 	{
 		std::cout << "ICP has reached maximum iterations" <<std::endl;
 	}
@@ -284,7 +288,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 	size_t row = std::min(A.rows(), B.rows());
 	MatrixXd src = MatrixXd::Ones(3+1, row);
 	MatrixXd src3d = MatrixXd::Ones(3, row);
-	MatrixXd dst = MatrixXd::Ones(3+1, row);
+	MatrixXd dst = MatrixXd::Ones(3+1, B.rows());
     NEIGHBORS neighbor;
   	Matrix4d T;
     Eigen::MatrixXd dst_trim;
@@ -296,7 +300,11 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 	{
 		src.block<3,1>(0,i) = A.block<1,3>(i,0).transpose();
 		src3d.block<3,1>(0,i) = A.block<1,3>(i,0).transpose(); // save the temp data
-		dst.block<3,1>(0,i) = B.block<1,3>(i,0).transpose();
+	}
+
+	for(int i = 0; i < B.rows(); ++i)
+	{
+		dst.block<3,1>(0, i) = B.block<1,3>(i, 0).transpose();
 	}
 
 	double prev_error = 0;
@@ -313,7 +321,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 
 		// sort vectors
 		std::vector<float> dist = neighbor.distances;
-		std::vector<int> dst_ind = neighbor.B_indices;
+		std::vector<int> dst_ind = neighbor.B_indices; // closest indicies from model dataset
 		std::vector<int> src_ind = neighbor.A_indices;
 
 		auto p = sort_permutation(dist, [](float const& a, float const& b){ return a < b; });
@@ -323,6 +331,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 		neighbor.A_indices = apply_permutation(src_ind, p);
 
 		double o = get_overlap_parameter(neighbor.distances);
+		std::cout << "Overlap parameter: " << o << std::endl;
 		int trimmed_length = (int)(o*row);
 
 		std::cout << "Number of points: " << row << std::endl;
@@ -367,7 +376,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
         prev_error = mse;
 	}
 
-	if(iter == max_iter)
+	if(iter == max_iter+1)
 	{
 		std::cout << "TrICP has reached maximum iterations" <<std::endl;
 	}
@@ -391,7 +400,7 @@ void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
     MatrixXf target_matrix = cloud_in->getMatrixXfMap(3, 4, 0).transpose();
 
     float tolerance = 0.000001;
-	float min_mse = 0.00001;
+	float min_mse = 0.000001;
 
     // call icp
     // ICP_OUT icp_result = icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance);
@@ -401,7 +410,7 @@ void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
 
     MatrixXf source_trans_matrix = source_matrix;
     
-    int num_rows = source_matrix.rows();
+    int num_rows = std::min(source_matrix.rows(), target_matrix.rows());
     MatrixXf source_trans4d = MatrixXf::Ones(3+1, num_rows);
     for(int i = 0; i < num_rows; ++i)
     {
@@ -421,7 +430,7 @@ void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
     {
         temp_cloud[n].x = source_trans_matrix(n, 0);
         temp_cloud[n].y = source_trans_matrix(n, 1);
-        temp_cloud[n].z = source_trans_matrix(n, 2);	
+        temp_cloud[n].z = source_trans_matrix(n, 2);
     }
     cloud_icp_ = temp_cloud;
 }
@@ -465,22 +474,22 @@ NEIGHBORS ICP::nearest_neighbor_naive(const Eigen::MatrixXd &A, const Eigen::Mat
 
 NEIGHBORS ICP::nearest_neighbor_kdtree(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B)
 {
-    int num_rows_B = B.rows();
+    int num_rows_A = A.rows();
     NEIGHBORS neigh;
 
 	using matrix_t = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
-    matrix_t mat = A;
+    matrix_t mat = B;
 
 	using my_kd_tree_t = nanoflann::KDTreeEigenMatrixAdaptor<matrix_t, SAMPLES_DIM /*fixed size*/, nanoflann::metric_L2>;
 	my_kd_tree_t mat_index(SAMPLES_DIM, std::cref(mat), 10 /* max leaf */);
 
-	for(int i = 0; i < num_rows_B; ++i)
+	for(int i = 0; i < num_rows_A; ++i)
 	{
 		std::vector<double> query_pt(SAMPLES_DIM);
 		for(size_t d = 0; d < SAMPLES_DIM; ++d)
 		{
-			query_pt[d] = B(i, d);
+			query_pt[d] = A(i, d);
 		}
 
 		// do a knn search
@@ -493,6 +502,7 @@ NEIGHBORS ICP::nearest_neighbor_kdtree(const Eigen::MatrixXd &A, const Eigen::Ma
 
 		mat_index.index_->findNeighbors(resultSet, &query_pt[0]);		
 
+		// neigh.distances.push_back(sqrt(out_dists_sqr[0]));
 		neigh.distances.push_back(out_dists_sqr[0]);
         neigh.B_indices.push_back(ret_indexes[0]);
 		neigh.A_indices.push_back(i);
@@ -503,7 +513,7 @@ NEIGHBORS ICP::nearest_neighbor_kdtree(const Eigen::MatrixXd &A, const Eigen::Ma
 
 double ICP::get_overlap_parameter(const std::vector<float> &distances)
 {
-	double min_overlap = 0.4;
+	double min_overlap = 0.2;
 	double lambda = 2.0;
 	double obj_fun = 0;
 	double obj_fun_next = 0;
@@ -516,7 +526,7 @@ double ICP::get_overlap_parameter(const std::vector<float> &distances)
 		obj_fun_prev = trimmed_mse(min_overlap - overlap_step, distances) * (1/pow((min_overlap - overlap_step), lambda + 1));
 		obj_fun_next = trimmed_mse(min_overlap + overlap_step, distances) * (1/pow((min_overlap + overlap_step), lambda + 1));
 
-		if((obj_fun < obj_fun_prev) && (obj_fun_next > obj_fun)) 
+		if((obj_fun < obj_fun_prev) && (obj_fun_next > obj_fun))
 		{
 			return min_overlap;
 			break;
