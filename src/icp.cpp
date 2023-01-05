@@ -5,12 +5,6 @@
 
 #include "icp.hpp"
 
-// Euclidean distance
-float ICP::dist(const Vector3d &a, const Vector3d &b)
-{
-	return sqrt((a[0] - b[0])*(a[0] - b[0]) + (a[1] - b[1])*(a[1] - b[1]) + (a[2] - b[2])*(a[2] - b[2]));
-}
-
 void ICP::set_maximum_iterations(int iter)
 {
     max_iter = iter;
@@ -229,8 +223,8 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 	// when the number of iterations is less than the maximum
 	for(iter = 1; iter <= max_iteration; ++iter)
 	{
-		std::cout << "----------------" << std::endl;
-		std::cout << "Iteration: " << iter << std::endl;
+		// std::cout << "----------------" << std::endl;
+		// std::cout << "Iteration: " << iter << std::endl;
 
         // neighbor = nearest_neighbor_naive(src3d.transpose(), B);
 		neighbor = nearest_neighbor_kdtree(src3d.transpose(), B);
@@ -251,9 +245,11 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
             src3d.block<3,1>(0, j) = src.block<3,1>(0, j);
         }
 
-        mean_error = sqrt(std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size());
+        // mean_error = sqrt(std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size());
+		mean_error = std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size();
 
-        std::cout << "Mean distance error: " << abs(prev_error - mean_error) <<std::endl;
+        // std::cout << "Mean distance error: " << abs(prev_error - mean_error) <<std::endl;
+		std::cout << "Iteration: " << iter << "\r" << std::flush;
 
         if(abs(prev_error - mean_error) < tolerance)
         {
@@ -307,7 +303,8 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 		dst.block<3,1>(0, i) = B.block<1,3>(i, 0).transpose();
 	}
 
-	double prev_error = 0;
+	double prev_sum = 0;
+	double sum = 0;
 	double mse = 0;
 
 	// when the number of iterations is less than the maximum
@@ -355,18 +352,20 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
             src3d.block<3,1>(0, j) = src.block<3,1>(0, j);
         }
 
-        double mean_error = sqrt(std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size());
-		mse = sqrt(trimmed_mse(o, neighbor.distances));
+        // double mean_error = sqrt(std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size());
+		int length = o * neighbor.distances.size();
+		mse = std::accumulate(neighbor.distances.begin(), neighbor.distances.begin()+length, 0.0)/length;
+		sum = std::accumulate(neighbor.distances.begin(), neighbor.distances.begin()+length, 0.0);
 
         // std::cout << "Mean distance error: " << mean_error << "%\r" << std::flush; // std::endl;
 		// std::cout << "Trimmed MSE: " << mse << "\r" << std::flush; // std::endl;
 		std::cout << "Iteration: " << iter << "\r" << std::flush;
 
-        if(abs(prev_error - mse) < tolerance)
+        if(abs(prev_sum - sum) < tolerance)
         {
 			std::cout << "TrICP has converged in: " << iter << " iterations due to small relative change in error" << std::endl;
-			std::cout << "Trimmed MSE: " << mse << std::endl;
-			std::cout << "Prev. trimmed MSE: " << prev_error << std::endl;
+			std::cout << "Trimmed sum: " << sum << std::endl;
+			std::cout << "Prev. trimmed sum: " << prev_sum << std::endl;
             break;
         }
 		if(mse < min_mse)
@@ -376,7 +375,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 			std::cout << "Minimum trimmed MSE: " << min_mse << std::endl;
             break;
         }
-        prev_error = mse;
+        prev_sum = mse;
 	}
 
 	if(iter == max_iter+1)
@@ -404,8 +403,9 @@ Matrix4d ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_, const int alg)
     MatrixXf source_matrix = cloud_icp->getMatrixXfMap(3, 4, 0).transpose();
     MatrixXf target_matrix = cloud_in->getMatrixXfMap(3, 4, 0).transpose();
 
-    float tolerance = 0.0000000001;
-	float min_mse = 0.000001;
+    float tolerance = 0.000000000001;
+	// float tolerance = 0.0000001;
+	float min_mse = 0.0000001;
 
 	ICP_OUT icp_result;
     // call icp
@@ -472,7 +472,7 @@ NEIGHBORS ICP::nearest_neighbor_naive(const Eigen::MatrixXd &A, const Eigen::Mat
         for(int j = 0; j < num_rows_B; ++j)
         {
             vec_B = B.block<1,3>(j, 0).transpose();
-            dist_temp = dist(vec_A, vec_B);
+			dist_temp = sqrt((vec_A[0] - vec_B[0])*(vec_A[0] - vec_B[0]) + (vec_A[1] - vec_B[1])*(vec_A[1] - vec_B[1]) + (vec_A[2] - vec_B[2])*(vec_A[2] - vec_B[2]));
             if(dist_temp < min)
             {
                 min = dist_temp;
@@ -553,16 +553,4 @@ double ICP::get_overlap_parameter(const std::vector<float> &distances)
 		}
 	}
 	return min_overlap;
-}
-
-double ICP::trimmed_mse(const double &overlap, const std::vector<float> &distances)
-{
-	double trimmed_mse = 0;
-	int length = overlap * distances.size();
-	for(int i = 0; i < length; ++i)
-	{
-		trimmed_mse += distances[i];
-	}
-	trimmed_mse /= length;
-	return trimmed_mse;
 }

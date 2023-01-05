@@ -73,9 +73,7 @@ class ICP
         NEIGHBORS nearest_neighbor_kdtree(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
 
         // Helper functions
-        float dist(const Vector3d &a, const Vector3d &b); // for naive nearest neighbor
         void set_maximum_iterations(int iter);
-        double trimmed_mse(const double &overlap, const std::vector<float> &distances);
         double get_overlap_parameter(const std::vector<float> &distances);
 
         // Variables
