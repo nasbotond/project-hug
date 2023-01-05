@@ -19,9 +19,9 @@ constexpr int SAMPLES_DIM = 3;
 
 /*
 	The output of ICP algorithm
-	trans : transformation for best align
-	dictances[i] : the distance between node i in src and its nearst node in dst
-	inter : number of iterations
+	trans_mat : transformation for best fit
+	distances[i] : the distance between point i in src and its nearst point in dst
+	iter : number of iterations
 */
 typedef struct
 {
@@ -68,7 +68,7 @@ class ICP
         Matrix4d best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B);
         ICP_OUT icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, int leaf_size=10, int Ksearch=5);
         ICP_OUT tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, float tolerance, float min_mse, int leaf_size=10, int Ksearch=5);
-        void align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_);
+        Matrix4d align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_, const int alg);
         NEIGHBORS nearest_neighbor_naive(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
         NEIGHBORS nearest_neighbor_kdtree(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
 

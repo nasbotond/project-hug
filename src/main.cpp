@@ -42,26 +42,39 @@ int main(int argc, char* argv[])
     if(argc < 2)
     {
         printf("Usage :\n");
-        printf("\t\t%s model.ply data.ply test_case(0:overlap, 1:transformation, 2:noise) number_of_ICP_iterations\n", argv[0]);
+        printf("\t\t%s model.ply data.ply <ICP version> <angle> <trans> <stddev> <mean> <number_of_ICP_iterations>\n", argv[0]);
         PCL_ERROR("Provide two ply files.\n");
         return(-1);
     }
 
     int version = 0;
+    int angle = 8;
+    double translation = 0.04;
+    double stddev = 0.0;
+    double mean = 0.0;
     int iterations = 1;  // Default number of ICP iterations
     if(argc > 3)
     {
         // If the user passed the version as an argument
         version = atoi(argv[3]);
-        if(version < 0 || version > 2)
+        angle = atoi(argv[4]);
+        translation = atof(argv[5]);
+        stddev = atof(argv[6]);
+        mean = atof(argv[7]);
+        if(angle <= 0)
         {
-            printf("Test case options: 0->overlap, 1->transformation, 2->noise\n");
+            printf("Angle has to be greater than 0!\n");
             return (-1);
         }
-        if(argc > 4)
+        if(version < 0 || version > 1)
+        {
+            printf("Version 0 for ICP and version 1 for TrICP!\n");
+            return (-1);
+        }
+        if(argc > 8)
         {
             // If the user passed the number of iteration as an argument
-            iterations = atoi(argv[4]);
+            iterations = atoi(argv[8]);
             if(iterations < 1)
             {
                 PCL_ERROR("Number of initial iterations must be >= 1\n");
@@ -92,82 +105,42 @@ int main(int argc, char* argv[])
     Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Identity();
 
     // A rotation matrix (see https://en.wikipedia.org/wiki/Rotation_matrix)
-    double theta = M_PI / 8;  // The angle of rotation in radians
+    // double theta = M_PI / 8;  // The angle of rotation in radians
+    double theta = M_PI / angle;
     transformation_matrix(0, 0) = std::cos(theta);
     transformation_matrix(0, 1) = -sin(theta);
     transformation_matrix(1, 0) = sin(theta);
     transformation_matrix(1, 1) = std::cos(theta);
 
     // A translation on Z axis (0.4 meters)
-    transformation_matrix(2, 3) = 0.04;
-    const double mean = 0.0;
-    const double stddev = 0.005;
+    // transformation_matrix(2, 3) = 0.04;
+    transformation_matrix(2, 3) = translation;
+    // const double mean = 0.0;
+    // const double stddev = 0.005;
     std::default_random_engine generator;
     std::normal_distribution<double> dist(mean, stddev);
     
-    switch(version)
+    pcl::io::loadPLYFile(argv[2], *cloud_tr);
+
+    // Display in terminal the transformation matrix
+    std::cout << "Applying this rigid transformation to: cloud_icp -> cloud_icp" << std::endl;
+    print4x4Matrix(transformation_matrix);
+
+    pcl::transformPointCloud(*cloud_icp, *cloud_icp, transformation_matrix);
+    pcl::transformPointCloud(*cloud_tr, *cloud_tr, transformation_matrix);
+
+    // Add Gaussian noise          
+
+    for(size_t point_i = 0; point_i < cloud_icp->points.size (); ++point_i)
     {
-    // Overlap case with (optionally) transformation and Gaussian noise addition
-        case 0:
-            pcl::io::loadPLYFile(argv[2], *cloud_tr);
+        cloud_icp->points[point_i].x += static_cast<float>(dist(generator));
+        cloud_icp->points[point_i].y += static_cast<float>(dist(generator));
+        cloud_icp->points[point_i].z += static_cast<float>(dist(generator));
 
-            // Display in terminal the transformation matrix
-            std::cout << "Applying this rigid transformation to: cloud_icp -> cloud_icp" << std::endl;
-            print4x4Matrix(transformation_matrix);
-
-            pcl::transformPointCloud(*cloud_icp, *cloud_icp, transformation_matrix);
-            pcl::transformPointCloud(*cloud_tr, *cloud_tr, transformation_matrix);
-
-            // Add Gaussian noise          
-
-            // for(size_t point_i = 0; point_i < cloud_icp->points.size (); ++point_i)
-            // {
-            //     cloud_icp->points[point_i].x += static_cast<float>(dist(generator));
-            //     cloud_icp->points[point_i].y += static_cast<float>(dist(generator));
-            //     cloud_icp->points[point_i].z += static_cast<float>(dist(generator));
-
-            //     cloud_tr->points[point_i].x += static_cast<float>(dist(generator));
-            //     cloud_tr->points[point_i].y += static_cast<float>(dist(generator));
-            //     cloud_tr->points[point_i].z += static_cast<float>(dist(generator));
-            // }
-
-            break;
-        // Transformation case
-        case 1:
-            pcl::io::loadPLYFile(argv[1], *cloud_tr);
-            // Display in terminal the transformation matrix
-            std::cout << "Applying this rigid transformation to: cloud_in -> cloud_icp" << std::endl;
-            print4x4Matrix(transformation_matrix);
-
-            // Executing the transformation
-            pcl::transformPointCloud(*cloud_in, *cloud_icp, transformation_matrix);
-            pcl::transformPointCloud(*cloud_in, *cloud_tr, transformation_matrix);
-            break;
-        // Gaussian noise case
-        case 2:
-            pcl::io::loadPLYFile(argv[1], *cloud_tr);
-
-            // Add Gaussian noise
-            cloud_icp->points.resize(cloud_in->points.size());
-            cloud_icp->header = cloud_in->header;
-            cloud_icp->width = cloud_in->width;
-            cloud_icp->height = cloud_in->height;
-
-            for(size_t point_i = 0; point_i < cloud_in->points.size (); ++point_i)
-            {
-                cloud_icp->points[point_i].x = cloud_in->points[point_i].x + static_cast<float>(dist(generator));
-                cloud_icp->points[point_i].y = cloud_in->points[point_i].y + static_cast<float>(dist(generator));
-                cloud_icp->points[point_i].z = cloud_in->points[point_i].z + static_cast<float>(dist(generator));
-
-                cloud_tr->points[point_i].x = cloud_in->points[point_i].x + static_cast<float>(dist(generator));
-                cloud_tr->points[point_i].y = cloud_in->points[point_i].y + static_cast<float>(dist(generator));
-                cloud_tr->points[point_i].z = cloud_in->points[point_i].z + static_cast<float>(dist(generator));    
-            }
-            break;
-    }  
-
-    // MatrixXf source_matrix = cloud_icp->getMatrixXfMap(3,4,0).transpose();
-    // MatrixXf target_matrix = cloud_in->getMatrixXfMap(3,4,0).transpose();
+        cloud_tr->points[point_i].x += static_cast<float>(dist(generator));
+        cloud_tr->points[point_i].y += static_cast<float>(dist(generator));
+        cloud_tr->points[point_i].z += static_cast<float>(dist(generator));
+    }
 
     ICP icp = ICP(cloud_in, cloud_icp, iterations);
     // The Iterative Closest Point algorithm
@@ -179,23 +152,17 @@ int main(int argc, char* argv[])
     // icp.align(*cloud_icp);
     // icp.setMaximumIterations(1);  // We set this variable to 1 for the next time we will call .align() function
     // PointCloudT::Ptr cloud_source_trans (new pcl::PointCloudT());
-    icp.align(*cloud_icp);
-    std::cout << "Applied " << iterations << " ICP iteration(s) in " << time.toc() << " ms" << std::endl;
+    Eigen::Matrix4d out_mat = icp.align(*cloud_icp, version);
+    // std::cout << "Applied " << iterations << " ICP iteration(s) in " << time.toc() << " ms" << std::endl;
+
+    print4x4Matrix(out_mat);
+
+    Eigen::Matrix3d E = transformation_matrix.block<3,3>(0,0)*out_mat.block<3,3>(0,0); //.transpose();
+
+    std::cout << "Rotation error (degrees): " << Eigen::AngleAxisd(E).angle()*(180/M_PI) << std::endl;
+    std::cout << "Translation magnitude error: " << sqrt(transformation_matrix(2,3)*transformation_matrix(2,3)) - sqrt(out_mat(0,3)*out_mat(0,3) + out_mat(1,3)*out_mat(1,3) + out_mat(2,3)*out_mat(2,3)) << std::endl;
 
     icp.set_maximum_iterations(1);
-
-    // if(icp.hasConverged())
-    // {
-    //     std::cout << "\nICP has converged, score is " << icp.getFitnessScore() << std::endl;
-    //     std::cout << "\nICP transformation " << iterations << " : cloud_icp -> cloud_in" << std::endl;
-    //     transformation_matrix = icp.getFinalTransformation().cast<double>();
-    //     print4x4Matrix(transformation_matrix);
-    // }
-    // else
-    // {
-    //     PCL_ERROR("\nICP has not converged.\n");
-    //     return(-1);
-    // }
 
     // Visualization
     pcl::visualization::PCLVisualizer viewer("ICP");
@@ -252,41 +219,15 @@ int main(int argc, char* argv[])
         {
             // The Iterative Closest Point algorithm
             time.tic();
-            icp.align(*cloud_icp);
-            // icp.align(*cloud_icp);
+            icp.align(*cloud_icp, version);
             std::cout << "Applied 1 ICP iteration in " << time.toc() << " ms" << std::endl;
-
-            // printf("\033[11A");  // Go up 11 lines in terminal output.
-            // printf("\nICP has converged, score is %+.0e\n", icp.getFitnessScore ());
-            std::cout << "\nICP transformation " << ++iterations << " : cloud_icp -> cloud_in" << std::endl;
-            // transformation_matrix *= icp.getFinalTransformation().cast<double>();  // WARNING /!\ This is not accurate! For "educational" purpose only!
-            // print4x4Matrix(transformation_matrix);  // Print the transformation between original pose and current pose
+            ++iterations;
 
             ss.str("");
             ss << iterations;
             std::string iterations_cnt = "ICP iterations = " + ss.str();
             viewer.updateText(iterations_cnt, 10, 60, 16, txt_gray_lvl, txt_gray_lvl, txt_gray_lvl, "iterations_cnt");
             viewer.updatePointCloud(cloud_icp, cloud_icp_color_h, "cloud_icp_v2");
-
-            // if(icp.hasConverged())
-            // {
-            //     printf("\033[11A");  // Go up 11 lines in terminal output.
-            //     printf("\nICP has converged, score is %+.0e\n", icp.getFitnessScore ());
-            //     std::cout << "\nICP transformation " << ++iterations << " : cloud_icp -> cloud_in" << std::endl;
-            //     transformation_matrix *= icp.getFinalTransformation().cast<double>();  // WARNING /!\ This is not accurate! For "educational" purpose only!
-            //     print4x4Matrix(transformation_matrix);  // Print the transformation between original pose and current pose
-
-            //     ss.str("");
-            //     ss << iterations;
-            //     std::string iterations_cnt = "ICP iterations = " + ss.str();
-            //     viewer.updateText(iterations_cnt, 10, 60, 16, txt_gray_lvl, txt_gray_lvl, txt_gray_lvl, "iterations_cnt");
-            //     viewer.updatePointCloud(cloud_icp, cloud_icp_color_h, "cloud_icp_v2");
-            // }
-            // else
-            // {
-            //     PCL_ERROR("\nICP has not converged.\n");
-            //     return (-1);
-            // }
         }
         next_iteration = false;
     }

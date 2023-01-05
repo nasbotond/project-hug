@@ -193,7 +193,7 @@ Matrix4d ICP::best_fit_transform_quat(const MatrixXd &A, const MatrixXd &B)
 	T.block<3,3>(0, 0) = R;
 	T.block<3,1>(0, 3) = t;
 
-	std::cout << "\n" << T << "\n" << std::endl;
+	// std::cout << "\n" << T << "\n" << std::endl;
 
 	return T;
 }
@@ -313,8 +313,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 	// when the number of iterations is less than the maximum
 	for(iter = 1; iter <= max_iteration; ++iter)
 	{
-		std::cout << "----------------" << std::endl;
-		std::cout << "Iteration: " << iter << std::endl;
+		// std::cout << "----------------" << "%\r" << std::flush; // std::endl;
 
         // neighbor = nearest_neighbor_naive(src3d.transpose(), B);
 		neighbor = nearest_neighbor_kdtree(src3d.transpose(), B);
@@ -333,8 +332,8 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 		double o = get_overlap_parameter(neighbor.distances);
 		int trimmed_length = (int)(o*row);
 
-		std::cout << "Number of points: " << row << std::endl;
-		std::cout << "Number of points (trimmed): " << trimmed_length << std::endl;
+		// std::cout << "Number of points: " << row << "%\r" << std::flush; // std::endl;
+		// std::cout << "Number of points (trimmed): " << trimmed_length << "%\r" << std::flush; // std::endl;
 
 		dst_trim = Eigen::MatrixXd::Ones(3, trimmed_length);
 		src_trim = Eigen::MatrixXd::Ones(3, trimmed_length);
@@ -359,17 +358,22 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
         double mean_error = sqrt(std::accumulate(neighbor.distances.begin(), neighbor.distances.end(), 0.0)/neighbor.distances.size());
 		mse = sqrt(trimmed_mse(o, neighbor.distances));
 
-        std::cout << "Mean distance error: " << mean_error <<std::endl;
-		std::cout << "Trimmed MSE: " << mse <<std::endl;
+        // std::cout << "Mean distance error: " << mean_error << "%\r" << std::flush; // std::endl;
+		// std::cout << "Trimmed MSE: " << mse << "\r" << std::flush; // std::endl;
+		std::cout << "Iteration: " << iter << "\r" << std::flush;
 
         if(abs(prev_error - mse) < tolerance)
         {
-			std::cout << "TrICP has converged in: " << iter << " iterations due to small relative change in error" <<std::endl;
+			std::cout << "TrICP has converged in: " << iter << " iterations due to small relative change in error" << std::endl;
+			std::cout << "Trimmed MSE: " << mse << std::endl;
+			std::cout << "Prev. trimmed MSE: " << prev_error << std::endl;
             break;
         }
 		if(mse < min_mse)
         {
-			std::cout << "TrICP has converged in: " << iter << " iterations" <<std::endl;
+			std::cout << "TrICP has properly converged in: " << iter << " iterations" << std::endl;
+			std::cout << "Trimmed MSE: " << mse << std::endl;
+			std::cout << "Minimum trimmed MSE: " << min_mse << std::endl;
             break;
         }
         prev_error = mse;
@@ -377,7 +381,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 
 	if(iter == max_iter+1)
 	{
-		std::cout << "TrICP has reached maximum iterations" <<std::endl;
+		std::cout << "TrICP has reached maximum iterations" << std::endl;
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
@@ -386,6 +390,8 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 
     T = best_fit_transform_quat(A, src3d.transpose());
 
+	// std::cout << "\n" << T << "\n" << std::endl;
+
 	result.trans_mat = T;
 	result.distances = neighbor.distances;
 	result.iter = iter;
@@ -393,17 +399,26 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 	return result;
 }
 
-void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
+Matrix4d ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_, const int alg)
 {
     MatrixXf source_matrix = cloud_icp->getMatrixXfMap(3, 4, 0).transpose();
     MatrixXf target_matrix = cloud_in->getMatrixXfMap(3, 4, 0).transpose();
 
-    float tolerance = 0.000001;
+    float tolerance = 0.0000000001;
 	float min_mse = 0.000001;
 
+	ICP_OUT icp_result;
     // call icp
-    // ICP_OUT icp_result = icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance);
-	ICP_OUT icp_result = tr_icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance, min_mse);
+	if(alg)
+	{
+		std::cout << "TrICP version" << std::endl;
+		icp_result = tr_icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance, min_mse);		
+	}
+	else
+	{
+		std::cout << "ICP version" << std::endl;
+		icp_result = icp_alg(source_matrix.cast<double>(), target_matrix.cast<double>(), max_iter, tolerance);
+	}	
 
     Matrix4f T = icp_result.trans_mat.cast<float>();
 
@@ -432,6 +447,8 @@ void ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_)
         temp_cloud[n].z = source_trans_matrix(n, 2);
     }
     cloud_icp_ = temp_cloud;
+
+	return icp_result.trans_mat;
 }
 
 NEIGHBORS ICP::nearest_neighbor_naive(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B)
