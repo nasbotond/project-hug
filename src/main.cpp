@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
         translation = atof(argv[5]);
         stddev = atof(argv[6]);
         mean = atof(argv[7]);
-        if(angle <= 0)
+        if(angle < 0)
         {
             printf("Angle has to be greater than 0!\n");
             return (-1);
@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
 
     // A rotation matrix (see https://en.wikipedia.org/wiki/Rotation_matrix)
     // double theta = M_PI / 8;  // The angle of rotation in radians
-    double theta = M_PI / angle;
+    double theta = angle == 0 ? 0 : M_PI / angle;
     transformation_matrix(0, 0) = std::cos(theta);
     transformation_matrix(0, 1) = -sin(theta);
     transformation_matrix(1, 0) = sin(theta);

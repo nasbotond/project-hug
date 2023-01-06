@@ -266,13 +266,13 @@ ICP_OUT ICP::icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration, fl
 
 	auto finish = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
-	std::cout << "Convergence in " << static_cast<double>(duration.count())/1000 << " milliseconds and " << iter << " iterations" << std::endl;
+	std::cout << "Convergence in " << static_cast<double>(duration.count())/1000 << " milliseconds and " << iter-1 << " iterations" << std::endl;
 
     T = best_fit_transform_quat(A, src3d.transpose());
 
 	result.trans_mat = T;
 	result.distances = neighbor.distances;
-	result.iter = iter;
+	result.iter = iter-1;
 
 	return result;
 }
@@ -375,7 +375,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 			std::cout << "Minimum trimmed MSE: " << min_mse << std::endl;
             break;
         }
-        prev_sum = mse;
+        prev_sum = sum;
 	}
 
 	if(iter == max_iter+1)
@@ -385,7 +385,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 
 	auto finish = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(finish - start);
-	std::cout << "Convergence in " << static_cast<double>(duration.count())/1000 << " milliseconds and " << iter << " iterations" << std::endl;
+	std::cout << "Convergence in " << static_cast<double>(duration.count())/1000 << " milliseconds and " << iter-1 << " iterations" << std::endl;
 
     T = best_fit_transform_quat(A, src3d.transpose());
 
@@ -393,7 +393,7 @@ ICP_OUT ICP::tr_icp_alg(const MatrixXd &A, const MatrixXd &B, int max_iteration,
 
 	result.trans_mat = T;
 	result.distances = neighbor.distances;
-	result.iter = iter;
+	result.iter = iter-1;
 
 	return result;
 }
@@ -404,8 +404,9 @@ Matrix4d ICP::align(pcl::PointCloud<pcl::PointXYZ>& cloud_icp_, const int alg)
     MatrixXf target_matrix = cloud_in->getMatrixXfMap(3, 4, 0).transpose();
 
     float tolerance = 0.000000000001;
-	// float tolerance = 0.0000001;
+	// float tolerance = 0.00000000000001;
 	float min_mse = 0.0000001;
+	// float min_mse = 0.00001;
 
 	ICP_OUT icp_result;
     // call icp
@@ -538,9 +539,9 @@ double ICP::get_overlap_parameter(const std::vector<float> &distances)
 
 	while(min_overlap <= 1.0)
 	{
-		obj_fun = trimmed_mse(min_overlap, distances) * (1/pow(min_overlap, lambda + 1));
-		obj_fun_prev = trimmed_mse(min_overlap - overlap_step, distances) * (1/pow((min_overlap - overlap_step), lambda + 1));
-		obj_fun_next = trimmed_mse(min_overlap + overlap_step, distances) * (1/pow((min_overlap + overlap_step), lambda + 1));
+		obj_fun = std::accumulate(distances.begin(), distances.begin()+(min_overlap * distances.size()), 0.0)/(min_overlap * distances.size()) * (1/pow(min_overlap, lambda + 1));
+		obj_fun_prev = std::accumulate(distances.begin(), distances.begin()+((min_overlap - overlap_step) * distances.size()), 0.0)/((min_overlap - overlap_step) * distances.size()) * (1/pow((min_overlap - overlap_step), lambda + 1));
+		obj_fun_next = std::accumulate(distances.begin(), distances.begin()+((min_overlap + overlap_step) * distances.size()), 0.0)/((min_overlap + overlap_step) * distances.size()) * (1/pow((min_overlap + overlap_step), lambda + 1));
 
 		if((obj_fun < obj_fun_prev) && (obj_fun_next > obj_fun))
 		{
